@@ -226,6 +226,9 @@
 #define REFS_IR_LEAVES          0x18    /* u64 leaf pages of the table */
 #define REFS_IR_ROWS            0x20    /* u64 rows of the table */
 #define REFS_IR_DATA            0x28    /* the table's header data */
+
+/* container table rows of 2.x: the first physical cluster */
+#define REFS2_CONT_PHYS         0x28
 /* node header (0x28 bytes) */
 #define REFS_NH_DATASTART       0x00
 #define REFS_NH_DATAEND         0x04

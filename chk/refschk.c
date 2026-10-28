@@ -358,8 +358,11 @@ CheckMediumV1(void)
     unsigned long long summary = 0;
     if (!RFS_SUCCESS(RfsTableOpenRoot(&Vol, REFS1_ROOT_MEDIUM, &T))) { printf("medium allocator does not open\n"); Errors++; return; }
     if (T->Root->Desc && T->Root->DescLen >= REFS_IR_DATA + 16) summary = RfsGet64(T->Root->Desc + REFS_IR_DATA + 8);
-    printf("medium allocator: %llu clusters free (of %llu)\n",
-           summary, (unsigned long long)Vol.TotalClusters);
+    {
+        unsigned long long spc = Vol.ClusterSize / 16384, freeb = RfsFreeBlocksV1(&Vol);
+        printf("free: %llu of %llu clusters (%llu MB); medium allocator summary %llu blocks\n",
+               freeb / spc, (unsigned long long)Vol.TotalClusters / spc, (freeb * 16384) >> 20, summary);
+    }
     RfsTableClose(&Vol, T);
 }
 

@@ -1,5 +1,16 @@
 REFSNT - Changelog
 
+v1.1.0.0
+Changelog:
+- Fixed Windows NT 3.1 hanging at "Shutdown in progress" with the disk light stuck on: the shutdown-time flush of the disk's hardware cache waited without a timeout and never returned on NT 3.1. ReFS volumes are written through and already consistent, so that flush is now skipped at shutdown.
+- Large non-cached reads and writes are split into pieces the disk stack accepts (1 MB each) rather than handed to the disk in one oversized IRP, which could bugcheck on a large volume.
+- Added refsfmt, a ReFS formatter like Windows' format /FS:ReFS: /FS:ReFSv3 (ReFS 3.14, the default), /FS:ReFSv2 (ReFS 2.0) and /FS:ReFSv1 (ReFS 1.2), also /R:1|2|3, with /A:4096|64K cluster sizes, /V:label and /T:xx. ReFS 2.0 and 3.14 volumes are built from templates of volumes Windows formatted and resized to the partition; ReFS 1.2 volumes are built from scratch. Runs on Windows NT 3.1 - XP x64 and on Linux.
+- Fixed directory listings skipping an entry after files had been added to the directory: a position remembered from an earlier listing was used to resume.
+- Fixed byte-range locks being left behind when a file was closed: the next lock on the file waited forever, so on NT 3.5 and later WritePrivateProfileString (and Explorer writing desktop.ini) hung on ReFS volumes.
+- The volume label can now be set (label X:) on ReFS 2.0 and 3.x volumes.
+- Fixed the size and free space of ReFS 1.2 volumes: the size was shown four times too large and the free space far too small (about 300 MB free on a nearly empty 10 GB volume). The free space is now counted from the allocators' rows.
+- refschk reports the free space of ReFS 1.2 volumes in clusters and MB.
+
 v1.0.0.0
 Changelog:
 - Initial Release.

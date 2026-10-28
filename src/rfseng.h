@@ -242,6 +242,7 @@ typedef struct _RFS_VOL {
     ULONGLONG   FreeClusters;           /* Medium tier: clusters not allocated (the summary) */
     ULONG       DataRunMax;             /* the longest extent written (clusters) */
     ULONGLONG   AvoidLo, AvoidHi;       /* physical clusters allocated last (the boot view's window) */
+    BOOLEAN     Formatting;             /* refsfmt: the small allocator (container tables) may change */
     BOOLEAN     BootView;               /* refsboot made it bootable (sectors 0-1: the boot loader) */
     UCHAR       BootSectors[1024];      /* those sectors as mounted */
 } RFS_VOL, *PRFS_VOL;
@@ -443,6 +444,7 @@ RFS_STATUS  RfsFileSaveV1(PRFS_VOL Vol, PRFS_FILE File);
 RFS_STATUS  RfsRemoveV1(PRFS_VOL Vol, ULONGLONG DirOid, const USHORT *Name, ULONG Len);
 RFS_STATUS  RfsFileWriteV1(PRFS_VOL Vol, PRFS_FILE File, ULONGLONG Off, ULONG Len, const VOID *Buf);
 RFS_STATUS  RfsCommitV1(PRFS_VOL Vol);
+ULONGLONG   RfsFreeBlocksV1(PRFS_VOL Vol);
 RFS_STATUS  RfsAllocPageV1(PRFS_VOL Vol, PRFS_REF Ref);
 RFS_STATUS  RfsFreePageV1(PRFS_VOL Vol, const RFS_REF *Ref);
 RFS_STATUS  RfsAllocV1Data(PRFS_VOL Vol, ULONG Blocks, PULONGLONG Blk, PULONG Got);

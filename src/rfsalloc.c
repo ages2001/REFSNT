@@ -14,7 +14,7 @@
  *   Medium (root 1)     covers every container; data and most metadata.
  *                       Containers owned by the other tiers are "allocated" here.
  *   Container (root 2)  the pages of tables 1, 2, 6 and 11.
- *   Small (root 12)     the container tables' pages; never changed here.
+ *   Small (root 12)     the container tables' pages; changed only by refsfmt.
  *
  * Rows are kept container sized: a uniform row spanning several containers
  * is cut into a bitmap row for the container being changed and uniform rows
@@ -49,12 +49,15 @@ static const ULONG TierRoot[RFS_NTIERS] = { REFS_ROOT_MEDIUM, REFS_ROOT_CONTALLO
 UCHAR
 RfsTierOf(PRFS_VOL V, PRFS_TABLE T)
 {
-    (VOID)V;
     if (T->Where == RFS_TROOT_CHECKPOINT) {
         switch (T->Index) {
         case REFS_ROOT_MEDIUM: case REFS_ROOT_CONTALLOC: case REFS_ROOT_REFCOUNT: case REFS_ROOT_INTEGRITY:
             return RFS_TIER_CONTAINER;
-        case REFS_ROOT_CONTAINER: case REFS_ROOT_CONTAINER2: case REFS_ROOT_SMALL:
+        case REFS_ROOT_CONTAINER: case REFS_ROOT_CONTAINER2:
+            /* 2.x has no small allocator: its container tables sit in the
+             * self region the container allocator covers */
+            return V->V2 ? RFS_TIER_CONTAINER : RFS_TIER_SMALL;
+        case REFS_ROOT_SMALL:
             return RFS_TIER_SMALL;
         }
     }
@@ -337,7 +340,7 @@ RfsAlloc(PRFS_VOL V, UCHAR Tier, UCHAR For, ULONG Min, ULONG Count, ULONG Align,
     ULONG want, pass;
     *Got = 0;
     if (V->ReadOnly) return RFS_READ_ONLY;
-    if (Tier >= RFS_TIER_SMALL) return RFS_NOT_SUPPORTED;
+    if (Tier > RFS_TIER_SMALL || (Tier == RFS_TIER_SMALL && !V->Formatting)) return RFS_NOT_SUPPORTED;
     if (Min == 0) Min = 1;
     if (Count < Min) Count = Min;
     st = RfsGlobal(V, TierRoot[Tier], &T);
@@ -481,7 +484,7 @@ RfsFree(PRFS_VOL V, UCHAR Tier, ULONGLONG Plcn, ULONGLONG Count)
     PRFS_TABLE T;
     RFS_STATUS st;
     if (V->ReadOnly) return RFS_READ_ONLY;
-    if (Tier >= RFS_TIER_SMALL) return RFS_NOT_SUPPORTED;
+    if (Tier > RFS_TIER_SMALL || (Tier == RFS_TIER_SMALL && !V->Formatting)) return RFS_NOT_SUPPORTED;
     st = RfsGlobal(V, TierRoot[Tier], &T);
     if (!RFS_SUCCESS(st)) return st;
     while (Count) {
@@ -692,7 +695,8 @@ RfsAllocInit(PRFS_VOL V)
     RfsTableClose(V, T);
     if (st != RFS_NO_MORE) return st;
     /* each tier's row format byte and the free count */
-    for (t = 0; t < RFS_TIER_SMALL; t++) {
+    for (t = 0; t < RFS_NTIERS; t++) {
+        if (t == RFS_TIER_SMALL && V->NRoots <= REFS_ROOT_SMALL) break;
         V->AllocFormat[t] = (UCHAR)(t == RFS_TIER_MEDIUM && V->Minor >= 7 ? 2 : 1);
         st = RfsGlobal(V, TierRoot[t], &T);
         if (!RFS_SUCCESS(st)) return st;

@@ -4,7 +4,8 @@ REFSNT is a from-scratch driver for Microsoft's **Resilient File System** on
 Windows NT 3.1, 3.5, 3.51, 4.0, 2000, XP and XP x64. It reads and writes
 **ReFS 1.2, 2.0 and 3.x** - the ReFS of Windows 8.1, Server 2016 TH2, and
 Windows 10 / 11 and Server 2019 and later - copy-on-write, with every page
-checksum kept right, and it can **start Windows NT from a ReFS volume**.
+checksum kept right, it **formats ReFS 1.2, 2.0 and 3.14 volumes** of its own,
+and it can **start Windows NT from a ReFS volume**.
 
 It is built like its siblings [UDFNT](https://github.com/ages2001/UDFNT),
 [EXTNT](https://github.com/ages2001/EXTNT),
@@ -19,13 +20,13 @@ test harness - with an NT driver layer on top.
 
 | | |
 |---|---|
-| **Version** | 1.0 |
+| **Version** | 1.1 |
 | **File system** | ReFS 3.x (Windows 10 1709+, 11, Server 2019+), ReFS 2.0 (Server 2016 TH2), ReFS 1.2 (Windows 8.1 / Server 2012 R2); ReFS 1.1 read the same way |
 | **Windows** | NT 3.1, 3.5, 3.51, 4.0, 2000, XP (x86); XP x64 / Server 2003 x64 (amd64) |
 | **Access** | read/write |
 | **Paging file** | yes |
 | **Starting Windows from it** | yes (ReFS 3.x), NT 3.1 - XP x64 |
-| **Tools** | `refsinst` (installer), `refschk` (checker), `refsboot` (boot setup) |
+| **Tools** | `refsinst` (installer), `refsfmt` (formatter: ReFS 1.2, 2.0, 3.14), `refschk` (checker), `refsboot` (boot setup) |
 
 ## Tested
 
@@ -40,6 +41,11 @@ from a ReFS volume, was used, shut down and started again.
 The same copy / compare / rename / delete run passes on a Windows 8.1 ReFS 1.2
 volume and on Server 2016 TH2 ReFS 2.0 volumes on every NT version, and XP x64
 pages to paging files on both (600 MB touched with 512 MB of RAM).
+
+On Windows NT 3.1, `refsfmt` formatted three partitions of one disk as ReFS
+3.14 (4 KB clusters), 2.0 (64 KB clusters) and 1.2, and REFSNT then copied,
+compared, renamed and deleted files on each; NT 4.0 then did the same on those volumes. `refschk` found all three clean every time. `refsfmt` volumes of 1.4 GB to
+300 GB pass `refschk` and the random-operation stress tests on Linux.
 
 After every run - clean shutdown or power cut - `refschk` finds the volume
 clean: every page checksum right, every key in order, no cluster lost or
@@ -146,23 +152,48 @@ Under `HKLM\SYSTEM\CurrentControlSet\Services\Refsnt` (all `REG_DWORD`;
 ## Tools
 
 ```
+refsfmt  X: [/FS:ReFS|ReFSv1|ReFSv2|ReFSv3] [/A:4096|64K] [/V:label] [/T:xx] [/Y]
+                                              format the volume
 refschk  X: [/Q] [/V]                         check the volume
 refsboot X: [/S:windir] [/T:xx] [/Q]          make the volume start Windows NT
 refsboot X: /U                                undo it (plain ReFS again)
 ```
 
-Both also take a partition of a disk (`\\.\PhysicalDrive1 /P:2 ...`) or an
-image file, on Windows and on Linux.
+All three also take a partition of a disk (`\\.\PhysicalDrive1 /P:2 ...`) or
+an image file, on Windows and on Linux.
 
+- **refsfmt** formats a partition, a whole disk or an image, like Windows'
+  `format /FS:ReFS`:
+  - `/FS:ReFSv3` (also `/FS:ReFS`, the default): ReFS 3.14, the ReFS of
+    Windows 10 1709 and later, Windows 11 and Server 2019 and later;
+  - `/FS:ReFSv2`: ReFS 2.0 (Windows Server 2016 Technical Preview / TH2);
+  - `/FS:ReFSv1`: ReFS 1.2 (Windows 8.1, Server 2012 R2), as Windows' own
+    `format /FS:ReFSv1` names it;
+  - `/R:1`, `/R:2`, `/R:3` are short for the same.
+
+  `/A:` picks 4 KB (the default) or 64 KB clusters for 2.0 and 3.14; ReFS 1.2
+  has 64 KB clusters. `/V:` sets the label (up to 32 characters). The
+  partition type becomes `07` unless `/T:` says otherwise. ReFS 2.0 and 3.14
+  volumes are a whole number of 64 MB containers and need at least 1344 MB.
+
+  ReFS 2.x and 3.x are full of structures only Windows' own format defines -
+  the log, the schema, the system tables - so `refsfmt` builds those volumes
+  from **templates of volumes Windows formatted** (Server 2016 TH2 for 2.0,
+  Windows 11 for 3.14), carried inside it compressed: their first containers
+  are written as they are, then everything that depends on the size - the boot
+  sector and its copy, the backup superblocks, both container tables, the
+  allocators and their summaries - is made for the new volume through the
+  engine, copy-on-write, and committed twice so that both checkpoints describe
+  it. The log area is cleared. Every volume gets its own serial number, and
+  3.14 volumes their own GUID; the label is set. ReFS 1.2 volumes are built
+  from scratch. Each new volume is mounted again before `refsfmt` reports
+  success.
 - **refschk** walks every table and checks key order and page checksums, the
   allocators against their bitmaps and summaries, every cluster against the
   allocators (lost or doubly used ones), and reads every file. On a drive it
   locks the volume first (REFSNT writes everything out and steps aside). It
   does not repair. Exit codes: 0 clean, 1 problems found, 2 could not check.
 - **refsboot** makes a ReFS volume start Windows NT, and undoes it (below).
-
-There is no formatter: format with Windows (`format X: /fs:refs`, or a Windows
-11 Dev Drive, which is ReFS on every edition).
 
 ## Starting Windows NT from ReFS
 
@@ -183,7 +214,8 @@ every boot driver. Boot files lying outside the 65518 clusters the FAT reaches
 are moved inside; REFSNT allocates in that window last, and brings the view up
 to date at every shutdown.
 
-1. Format the partition as ReFS 3.x (512-byte sectors) with Windows.
+1. Format the partition as ReFS 3.x (512-byte sectors): `refsfmt X:` or
+   Windows' `format X: /fs:refs`.
 2. Copy NTLDR, NTDETECT.COM, BOOT.INI and the Windows tree onto it.
 3. Install REFSNT into that Windows as a boot driver: `refsinst /BOOT` on it
    before copying, or the `Refsnt` service with Start 0, ImagePath
@@ -203,7 +235,10 @@ the second start on, the volume has C: alone.
 
 ## Limitations
 
-- No formatter of its own (format with Windows).
+- Volumes `refsfmt` makes are checked by REFSNT, `refschk` and the stress
+  tests; whether Windows 8.1 - 11 mount them has not been tried here (the
+  2.0 / 3.14 ones are Windows' own volumes resized, so they should).
+- The volume label can be changed on ReFS 2.0 and 3.x volumes, not on 1.2.
 - Integrity-stream files are read but not written.
 - Volumes with page checksum errors or a damaged primary object table are
   mounted read-only.
@@ -220,9 +255,9 @@ On Linux with `gcc-mingw-w64-i686` / `gcc-mingw-w64-x86-64` (which ship the
 DDK headers), `binutils` and `python3` - no Visual C++ or WDK:
 
 ```
-sh build/build_cross.sh  OUTDIR     # i386: refsnt.sys, refsinst.exe, refsboot.exe, refschk.exe
+sh build/build_cross.sh  OUTDIR     # i386: refsnt.sys, refsinst.exe, refsfmt.exe, refsboot.exe, refschk.exe
 sh build/build_amd64.sh  OUTDIR     # amd64: the same for XP x64 / Server 2003 x64
-bash test/buildlinux.sh             # Linux: rfstool (engine test tool), refsboot, refschk
+bash test/buildlinux.sh             # Linux: rfstool (engine test tool), refsfmt, refsboot, refschk
 ```
 
 Ready binaries are in `bin\i386` and `bin\amd64`; the i386 programs run on
@@ -250,6 +285,8 @@ through the engine, compare every file with an in-memory model and require
 | `src/rfsv1.c` | the ReFS 1.2 layout |
 | `src/rfn*.c` | the NT driver: IRP handlers, Cache Manager, drive letters |
 | `boot/refsboot.S` | the boot loader |
+| `fmt/refsfmt.c`, `rfsmkfs.c`, `rfsmk1.c` | the formatter: 2.0 / 3.14 from templates, 1.2 from scratch |
+| `fmt/rfstmpl.h`, `tools/rfstmpl.c` | the templates, and the tool that makes them from Windows-formatted volumes |
 | `fmt/`, `chk/`, `inst/`, `tools/` | `refsboot`, `refschk`, `refsinst`, the Linux test tool |
 | `doc/` | the ReFS 1.2 and 2.0 format notes |
 

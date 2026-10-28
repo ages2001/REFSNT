@@ -1848,6 +1848,36 @@ RfsRename(PRFS_VOL V, ULONGLONG FromDir, const USHORT *From, ULONG FromLen, ULON
 RFS_STATUS
 RfsSetLabel(PRFS_VOL V, const char *Label)
 {
-    (VOID)V; (VOID)Label;
-    return RFS_NOT_SUPPORTED;
+    /* the label row (key 0x510) of the volume information tables 0x500 and
+     * 0x501, kept alike: UTF-16 without a terminator; no label, no row */
+    static const ULONGLONG oids[2] = { REFS_OID_VOLINFO, REFS_OID_VOLINFO2 };
+    USHORT w[33];
+    UCHAR key[8], val[64];
+    ULONG n, len = 0, i, k, done = 0;
+    RFS_STATUS st = RFS_OK;
+    if (V->ReadOnly) return RFS_READ_ONLY;
+    if (V->V1) return RFS_NOT_SUPPORTED;
+    while (Label && Label[len]) len++;
+    n = len ? RfsUtf8ToUtf16(Label, len, w, 33) : 0;
+    if (n == (ULONG)-1 || n > 32) return RFS_BAD_NAME;
+    for (i = 0; i < n; i++) RfsPut16(val + 2 * i, w[i]);
+    RfsZero(key, sizeof(key));
+    RfsPut16(key, 0x510);
+    for (k = 0; k < 2; k++) {
+        PRFS_TABLE T;
+        if (!RFS_SUCCESS(RfsTableOpenObject(V, oids[k], &T))) continue;
+        if (n == 0) {
+            st = RfsTreeDelete(T, key, 8);
+            if (st == RFS_NOT_FOUND) st = RFS_OK;
+        } else {
+            st = RfsTreeUpdate(T, key, 8, val, 2 * n, 0);
+            if (st == RFS_NOT_FOUND) st = RfsTreeInsert(T, key, 8, val, 2 * n, 0, FALSE);
+        }
+        RfsTableClose(V, T);
+        if (!RFS_SUCCESS(st)) return st;
+        done++;
+    }
+    if (!done) return RFS_CORRUPT;
+    V->Label[RfsUtf16ToUtf8(w, n, V->Label, sizeof(V->Label) - 1)] = 0;
+    return RFS_OK;
 }

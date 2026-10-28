@@ -186,7 +186,8 @@ typedef IO_STACK_LOCATION EXTENDED_IO_STACK_LOCATION, *PEXTENDED_IO_STACK_LOCATI
 extern PIRP RfnXTopLevelIrp;
 #define IoGetTopLevelIrp()          (RfnXTopLevelIrp)
 #define IoSetTopLevelIrp(I)         (RfnXTopLevelIrp = (PIRP)(I))
-#define IoGetRequestorProcess(Irp)  ((PEPROCESS)0)
+/* (cleanup runs in the process closing the handle: its locks go) */
+#define IoGetRequestorProcess(Irp)  IoGetCurrentProcess()
 #define IoGetDeviceToVerify(T)      ((PDEVICE_OBJECT)0)
 #define IoSetDeviceToVerify(T, D)   ((void)0)
 #endif
@@ -406,6 +407,7 @@ NTSTATUS RfnExceptionStatus(NTSTATUS Code);
 
 #define RFN_PAGE_SIZE           0x1000
 #define RFN_ZERO_CHUNK          0x10000
+#define RFN_MAX_TRANSFER        0x100000    /* cap one disk IRP; miniport can't take a multi-hundred-MB transfer */
 #define RFN_MAX_LABEL           32          /* NT's longest label (ReFS keeps 32 characters) */
 #define RFN_MAX_NAME            RFX_MAX_NAME   /* bytes of UTF-8 */
 #define RFN_SECTOR_SIZE         (Vcb->SectorSize)       /* the device's sector (512 - 4096) */
@@ -617,6 +619,7 @@ typedef struct _RFN_DATA {
     BOOLEAN         Writable;       /* registry: allow writing at all */
     ULONG           DefaultUid, DefaultGid;
     ULONG           FileMode, DirMode;  /* permission bits of new files / dirs */
+    BOOLEAN         ShuttingDown;   /* IRP_MJ_SHUTDOWN: skip the disk cache-flush */
 } RFN_DATA, *PRFN_DATA;
 
 extern RFN_DATA RfnData;

@@ -152,7 +152,7 @@ BuildMedium(FMT *F, ULONGLONG Blk, PRFS_REF Out)
     ULONGLONG chunkblocks = 0x1000;
     ULONGLONG totalcl = F->Blocks / (V->ClusterSize / BLK);
     ULONGLONG nchunks = (F->Blocks + chunkblocks - 1) / chunkblocks;
-    ULONGLONG freecl = totalcl, ch;
+    ULONGLONG covered = 0, freeblk = 0, ch;
     RFS_STATUS st;
     PUCHAR bm = (PUCHAR)RfsHostAlloc(cpc / 8);
     PUCHAR val = (PUCHAR)RfsHostAlloc(AR1_BITMAP + cpc / 8);
@@ -177,11 +177,13 @@ BuildMedium(FMT *F, ULONGLONG Blk, PRFS_REF Out)
         RfsCopy(key, val, 16);
         st = RfsTreeInsert(T, key, 16, val, vsz, 0, FALSE);
         if (!RFS_SUCCESS(st)) break;
-        freecl -= used;
+        covered += chunkblocks;
+        freeblk += (ULONGLONG)(cpc - used) * (V->ClusterSize / BLK);
     }
     if (RFS_SUCCESS(st)) {
-        RfsPut64(T->Root->Desc + REFS_IR_DATA + 0, totalcl);
-        RfsPut64(T->Root->Desc + REFS_IR_DATA + 8, freecl);
+        /* blocks covered by the rows and free in them (as Windows and the engine count) */
+        RfsPut64(T->Root->Desc + REFS_IR_DATA + 0, covered);
+        RfsPut64(T->Root->Desc + REFS_IR_DATA + 8, freeblk);
         st = EmitTable(F, T, Blk, Out);
     }
     RfsNodeFree(T->Root); RfsHostFree(T);
@@ -222,8 +224,9 @@ BuildLarge(FMT *F, ULONGLONG Blk, PRFS_REF Out)
     RfsCopy(key, val, 16);
     st = RfsTreeInsert(T, key, 16, val, vsz, 0, FALSE);
     if (RFS_SUCCESS(st)) {
-        RfsPut64(T->Root->Desc + REFS_IR_DATA + 0, nchunks);
-        RfsPut64(T->Root->Desc + REFS_IR_DATA + 8, nchunks - usedch);
+        /* blocks: the volume, and those of the chunks not given out */
+        RfsPut64(T->Root->Desc + REFS_IR_DATA + 0, F->Blocks);
+        RfsPut64(T->Root->Desc + REFS_IR_DATA + 8, (nchunks - usedch) * chunkblocks);
         st = EmitTable(F, T, Blk, Out);
     }
     RfsNodeFree(T->Root); RfsHostFree(T);

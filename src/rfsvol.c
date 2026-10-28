@@ -439,7 +439,6 @@ ReadCheckpoint3(PRFS_VOL V)
  * than the last 16 bytes of the row. Containers not in the table (the self
  * region, container 0) are identity-mapped: virtual == physical.
  */
-#define REFS2_CONT_PHYS  0x28
 static RFS_STATUS
 BuildContainersV2(PRFS_VOL V)
 {
@@ -640,16 +639,8 @@ RfsMount(PRFS_VOL V, BOOLEAN ReadOnly)
         else if (V->ChecksumErrors) V->ReadOnlyWhy = "checksum errors";
         if (V->ReadOnlyWhy) return RFS_OK;
         V->ReadOnly = FALSE;
-        {
-            /* free clusters: the medium allocator's and the chunks the large one has not given out */
-            PRFS_TABLE T;
-            ULONGLONG blocks = 0;
-            if (RFS_SUCCESS(RfsGlobal(V, REFS1_ROOT_MEDIUM, &T)) && T->Root->Desc && T->Root->DescLen >= REFS_IR_DATA + 16)
-                blocks += RfsGet64(T->Root->Desc + REFS_IR_DATA + 8);
-            if (RFS_SUCCESS(RfsGlobal(V, REFS1_ROOT_LARGE, &T)) && T->Root->Desc && T->Root->DescLen >= REFS_IR_DATA + 16)
-                blocks += RfsGet64(T->Root->Desc + REFS_IR_DATA + 8);
-            V->FreeClusters = blocks / (V->ClusterSize / REFS1_PAGE);
-        }
+        /* free clusters: the medium allocator's and the chunks the large one has not given out */
+        V->FreeClusters = RfsFreeBlocksV1(V) / (V->ClusterSize / REFS1_PAGE);
         return RFS_OK;
     }
     sb = (PUCHAR)RfsHostAlloc(V->ClusterSize);

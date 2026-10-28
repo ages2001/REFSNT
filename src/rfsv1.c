@@ -323,6 +323,37 @@ RowRecount(PUCHAR V)
     RfsPut32(V + AR1_LRL, lrl);
 }
 
+/*
+ * Free 16 KiB blocks, from the allocator rows themselves: each row's free
+ * count (in bits) times its bit size. The medium allocator's rows cover the
+ * chunks it was handed; the large allocator's clear bits are whole free
+ * chunks. (The summaries in the roots' header data use different units on
+ * volumes Windows made.)
+ */
+ULONGLONG
+RfsFreeBlocksV1(PRFS_VOL V)
+{
+    static const ULONG roots[2] = { REFS1_ROOT_MEDIUM, REFS1_ROOT_LARGE };
+    ULONGLONG blocks = 0;
+    ULONG k;
+    for (k = 0; k < 2; k++) {
+        PRFS_TABLE T;
+        RFS_CURSOR c;
+        RFS_STATUS st;
+        if (!RFS_SUCCESS(RfsTableOpenRoot(V, roots[k], &T))) continue;
+        st = RfsSeek(T, NULL, 0, &c);
+        while (RFS_SUCCESS(st) && st != RFS_NO_MORE) {
+            PRFS_ROW r = RfsCurRow(&c);
+            if (r->ValLen >= AR1_BITMAP && RfsGet32(r->Val + AR1_SHIFT) < 32)
+                blocks += (ULONGLONG)RfsGet32(r->Val + AR1_FREE) << RfsGet32(r->Val + AR1_SHIFT);
+            st = RfsNext(&c);
+        }
+        RfsCursorClose(&c);
+        RfsTableClose(V, T);
+    }
+    return blocks;
+}
+
 /* the medium allocator's free-cluster summary */
 static VOID
 MedSummary(PRFS_TABLE T, LONGLONG Delta)

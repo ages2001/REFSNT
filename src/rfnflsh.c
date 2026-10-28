@@ -318,7 +318,12 @@ RfnFlushVolume (
         }
     }
 
-    (VOID)RfnFlushDevice(Vcb);
+    /* Skipped during shutdown: the disk cache-flush waits on a disk stack that
+     * may already be going down (the "Shutdown in progress" hang, disk light on).
+     * Writes are write-through; the disk flushes its own cache at shutdown. */
+    if (!RfnData.ShuttingDown) {
+        (VOID)RfnFlushDevice(Vcb);
+    }
 
     return Status;
 }
@@ -389,6 +394,7 @@ RfnCommonShutdown (
     UNREFERENCED_PARAMETER(Ctx);
 
     RFN_DBG((RFN_PFX "shutdown\n"));
+    RfnData.ShuttingDown = TRUE;   /* skip disk cache-flush: hangs at shutdown */
     (VOID)ExAcquireResourceSharedLite(&RfnData.Resource, TRUE);
 
     __try {

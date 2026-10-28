@@ -18,6 +18,6 @@ if [ -f "$ROOT/boot/refsboot.S" ]; then
 fi
 echo "Linking the tools..."
 $GCC $EXEBASE $TOOLCRT $TINC -o "$OUT/refschk.exe" "$ROOT/chk/refschk.c" $ENGSRC "$HERE/toolcrt.c" -lkernel32 -lgcc
-[ -f "$ROOT/fmt/refsfmt.c" ] && $GCC $EXEBASE $TOOLCRT $TINC -o "$OUT/refsfmt.exe" "$ROOT/fmt/refsfmt.c" "$ROOT/fmt/rfsmkfs.c" $ENGSRC "$HERE/toolcrt.c" -lkernel32 -lgcc
+[ -f "$ROOT/fmt/refsfmt.c" ] && $GCC $EXEBASE $TOOLCRT $TINC -o "$OUT/refsfmt.exe" "$ROOT/fmt/refsfmt.c" "$ROOT/fmt/rfsmkfs.c" "$ROOT/fmt/rfsmk1.c" $ENGSRC "$HERE/toolcrt.c" -lkernel32 -lgcc
 [ -f "$ROOT/fmt/refsboot.c" ] && $GCC $EXEBASE $TOOLCRT $TINC -o "$OUT/refsboot.exe" "$ROOT/fmt/refsboot.c" $ENGSRC "$HERE/toolcrt.c" -lkernel32 -lgcc
 $GCC $EXEBASE $TOOLCRT -o "$OUT/refsinst.exe" "$ROOT/inst/refsinst.c" "$HERE/toolcrt.c" -ladvapi32 -lkernel32 -lgcc

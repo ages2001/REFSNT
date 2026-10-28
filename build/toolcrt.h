@@ -62,5 +62,6 @@ int   atoi(const char *);
 long  atol(const char *);
 int   _strnicmp(const char *, const char *, unsigned);
 int   fflush(void *);
+int   getchar(void);
 
 #endif

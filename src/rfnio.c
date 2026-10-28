@@ -724,6 +724,9 @@ RfnNonCachedIo (
         if (Length > Contiguous) {
             Length = Contiguous;
         }
+        if (Length > RFN_MAX_TRANSFER) {
+            Length = RFN_MAX_TRANSFER;   /* never hand the disk stack an oversized IRP */
+        }
 
         if (Lbo == -1) {
             /* a hole reads as zeros */

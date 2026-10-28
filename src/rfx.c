@@ -390,7 +390,9 @@ RfxCountFree(PRFX_VOL Vol)
     PRFS_VOL R = V2R(Vol);
     if (R->V1) {
         ULONG cpb = R->ClusterSize / REFS1_PAGE;             /* 16 KiB blocks a cluster */
-        Vol->DataBlocks = R->TotalClusters * cpb;
+        /* in 16 KiB blocks (the volume's block size here): TotalClusters
+         * already counts blocks on 1.x, the free count whole clusters */
+        Vol->DataBlocks = R->TotalClusters;
         Vol->FreeBlocksCount = RfsFreeCount(R) * cpb;
         if (Vol->FreeBlocksCount > Vol->DataBlocks) Vol->FreeBlocksCount = Vol->DataBlocks;
         return;
@@ -674,6 +676,13 @@ RfxEnum(PRFX_VOL Vol, ULONG DirInoNum, PRFX_INODE Dir, ULONGLONG Cookie, PRFX_EN
     if (DirInoNum & RFX_VIRTUAL_INO) return RFX_NOT_A_DIRECTORY;
     e = (RFS_DIRENT *)RfxHostAlloc(RFX_ESCR);
     if (!e) return RFX_NO_MEMORY;
+    if (Cookie == 0) {
+        /* a new enumeration: what was remembered about this directory may be
+         * from before it changed (a file added in front of the place an old
+         * slot names would make the next call skip an entry) */
+        for (i = 0; i < RFX_ENUM_SLOTS; i++)
+            if (Vol->Enum[i].DirIno == DirInoNum) Vol->Enum[i].DirIno = 0;
+    }
     for (i = 0; Cookie && i < RFX_ENUM_SLOTS; i++) {
         if (Vol->Enum[i].DirIno == DirInoNum && Vol->Enum[i].Cookie == Cookie) { pos = &Vol->Enum[i]; break; }
     }
@@ -694,9 +703,17 @@ RfxEnum(PRFX_VOL Vol, ULONG DirInoNum, PRFX_INODE Dir, ULONGLONG Cookie, PRFX_EN
     FromEnt(Vol, oid, e, Entry);
     Entry->Cookie = Cookie + 1;
     if (!Entry->Inode) st = RFX_NO_MEMORY;
-    if (!pos) {
-        pos = &Vol->Enum[Vol->EnumNext];
-        Vol->EnumNext = (Vol->EnumNext + 1) % RFX_ENUM_SLOTS;
+    if (pos) {
+        /* the slot moves on; another one may still name the next place */
+        for (i = 0; i < RFX_ENUM_SLOTS; i++)
+            if (&Vol->Enum[i] != pos && Vol->Enum[i].DirIno == DirInoNum && Vol->Enum[i].Cookie == Cookie + 1) Vol->Enum[i].DirIno = 0;
+    } else {
+        for (i = 0; i < RFX_ENUM_SLOTS; i++)
+            if (Vol->Enum[i].DirIno == DirInoNum && Vol->Enum[i].Cookie == Cookie + 1) { pos = &Vol->Enum[i]; break; }
+        if (!pos) {
+            pos = &Vol->Enum[Vol->EnumNext];
+            Vol->EnumNext = (Vol->EnumNext + 1) % RFX_ENUM_SLOTS;
+        }
     }
     pos->DirIno = DirInoNum;
     pos->Cookie = Cookie + 1;
